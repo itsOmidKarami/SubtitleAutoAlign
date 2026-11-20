@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/itsOmidKarami/SubtitleAutoAlign/main/icon.png",
     "versions": [
       {
+        "version": "0.3.0.0",
+        "changelog": "Reuses each video's speech analysis (much faster later subtitles); optional per-library analysis of new videos",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/itsOmidKarami/SubtitleAutoAlign/releases/download/v0.3.0.0/subtitle-auto-align-0.3.0.0.zip",
+        "checksum": "019c7136da644e344b400144c92d5887",
+        "timestamp": "2026-11-20T22:28:51Z"
+      },
+      {
         "version": "0.2.0.0",
         "changelog": "TV episodes and per-library auto-align; settings page fixed on Jellyfin 12",
         "targetAbi": "12.1.0.0",
