@@ -125,7 +125,7 @@ public sealed class SubtitleDownloadWatcher : IHostedService
         var videoPath = video.Path;
         if (string.IsNullOrEmpty(videoPath))
         {
-            _logger.LogDebug("Movie {MovieName} has no video path; skipping", video.Name);
+            _logger.LogDebug("{ItemName} has no video path; skipping", video.Name);
             return;
         }
 
@@ -134,8 +134,8 @@ public sealed class SubtitleDownloadWatcher : IHostedService
         var firstSight = !_knownSubtitlePaths.ContainsKey(video.Id);
         var previousSubtitlePaths = _knownSubtitlePaths.GetOrAdd(video.Id, _ => new HashSet<string>());
 
-        _logger.LogInformation(
-            "Checked {MovieName} for new subtitles: {CurrentCount} external subtitle(s) currently present, {PreviousCount} previously known",
+        _logger.LogDebug(
+            "Checked {ItemName} for new subtitles: {CurrentCount} external subtitle(s) currently present, {PreviousCount} previously known",
             video.Name,
             currentSubtitlePaths.Count,
             previousSubtitlePaths.Count);
@@ -159,19 +159,19 @@ public sealed class SubtitleDownloadWatcher : IHostedService
         var configuration = Plugin.Instance?.Configuration;
         if (configuration?.EnableAutoAlign == false)
         {
-            _logger.LogInformation("Automatic alignment is disabled; not aligning new subtitles for {MovieName}", video.Name);
+            _logger.LogInformation("Automatic alignment is disabled; not aligning new subtitles for {ItemName}", video.Name);
             return;
         }
 
         var libraryIds = _libraryManager.GetCollectionFolders(video).Select(folder => folder.Id);
         if (configuration is not null && !AutoAlignScope.IsInEnabledLibrary(libraryIds, configuration.DisabledLibraryIds))
         {
-            _logger.LogInformation("{MovieName} is not in a watched library; not aligning its new subtitles", video.Name);
+            _logger.LogInformation("{ItemName} is not in a watched library; not aligning its new subtitles", video.Name);
             return;
         }
 
         _logger.LogInformation(
-            "Found {NewCount} newly-appeared subtitle file(s) for {MovieName}: {NewPaths}",
+            "Found {NewCount} newly-appeared subtitle file(s) for {ItemName}: {NewPaths}",
             newPaths.Count,
             video.Name,
             string.Join(", ", newPaths));

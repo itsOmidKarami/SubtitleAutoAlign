@@ -56,6 +56,13 @@ public class AutoAlignScopeTests
     }
 
     [Fact]
+    public void IsInEnabledLibrary_NullDisabledIds_True()
+    {
+        // A null list can arrive via the API or a hand-edited XML config.
+        Assert.True(AutoAlignScope.IsInEnabledLibrary([Guid.NewGuid()], null!));
+    }
+
+    [Fact]
     public void Config_DefaultDisabledLibraryIds_IsEmpty()
     {
         Assert.Empty(new PluginConfiguration().DisabledLibraryIds);

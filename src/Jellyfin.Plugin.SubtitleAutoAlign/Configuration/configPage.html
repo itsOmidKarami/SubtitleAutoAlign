@@ -88,7 +88,15 @@
                 });
             }
 
+            // Saving before the settings have loaded would overwrite them with blank fields
+            // and an empty library list, so Save is refused until a load has succeeded.
+            let loaded = false;
+
+            // Only these library types can hold movies or episodes; an unset type is "mixed content".
+            const videoLibraryTypes = ['movies', 'tvshows', 'mixed', undefined, null, ''];
+
             function loadConfig(view) {
+                loaded = false;
                 Dashboard.showLoadingMsg();
                 Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getVirtualFolders()]).then(function (results) {
                     const config = results[0];
@@ -98,6 +106,7 @@
                     view.querySelector('#ExtraArguments').value = config.ExtraArguments;
                     view.querySelector('#TimeoutSeconds').value = config.TimeoutSeconds;
                     view.querySelector('#OverwriteExistingAlignedSubtitle').checked = config.OverwriteExistingAlignedSubtitle;
+                    loaded = true;
                     Dashboard.hideLoadingMsg();
                 }).catch(showError('Could not load the settings.'));
             }
@@ -110,10 +119,15 @@
                 const disabled = disabledIds.map(normalizeId);
                 const list = view.querySelector('#LibraryList');
                 list.innerHTML = '';
-                folders.forEach(function (folder) {
+                folders.filter(function (folder) {
+                    // A library without an ID can't be stored, so it isn't offered.
+                    return folder.ItemId && videoLibraryTypes.indexOf(folder.CollectionType) !== -1;
+                }).forEach(function (folder) {
                     const container = document.createElement('div');
                     container.className = 'checkboxContainer';
                     const label = document.createElement('label');
+                    // Not createElement('input', { is: ... }): Jellyfin web's createElement
+                    // polyfill expects a string there and throws. The attribute renders styled.
                     const input = document.createElement('input');
                     input.type = 'checkbox';
                     input.setAttribute('is', 'emby-checkbox');
@@ -137,6 +151,11 @@
             }
 
             function saveConfig(view) {
+                if (!loaded) {
+                    Dashboard.alert('The settings have not loaded yet. Reload the page and try again.');
+                    return;
+                }
+
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(pluginId).then(function (config) {
                     config.EnableAutoAlign = view.querySelector('#EnableAutoAlign').checked;

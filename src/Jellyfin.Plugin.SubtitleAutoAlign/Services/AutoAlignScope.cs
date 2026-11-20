@@ -23,11 +23,11 @@ public static class AutoAlignScope
     /// True when the item has no library, or at least one of its libraries is not disabled.
     /// </summary>
     /// <param name="itemLibraryIds">IDs of the libraries (collection folders) the item belongs to.</param>
-    /// <param name="disabledLibraryIds">Library IDs the user unticked, in any GUID format; unparsable entries are ignored.</param>
+    /// <param name="disabledLibraryIds">Library IDs the user unticked, in any GUID format; unparsable entries are ignored, null means none.</param>
     /// <returns>True if the item is in a watched library.</returns>
-    public static bool IsInEnabledLibrary(IEnumerable<Guid> itemLibraryIds, IEnumerable<string> disabledLibraryIds)
+    public static bool IsInEnabledLibrary(IEnumerable<Guid> itemLibraryIds, IEnumerable<string>? disabledLibraryIds)
     {
-        var disabled = disabledLibraryIds
+        var disabled = (disabledLibraryIds ?? [])
             .Select(id => Guid.TryParse(id, out var guid) ? guid : Guid.Empty)
             .Where(guid => guid != Guid.Empty)
             .ToHashSet();
