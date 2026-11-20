@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/itsOmidKarami/SubtitleAutoAlign/main/icon.png",
     "versions": [
       {
+        "version": "0.3.1.0",
+        "changelog": "Skips .strm files and disc folders for pre-analysis; queue no longer leaves idle waits behind",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/itsOmidKarami/SubtitleAutoAlign/releases/download/v0.3.1.0/subtitle-auto-align-0.3.1.0.zip",
+        "checksum": "f35a9ed19349a2005318e177c504f1b3",
+        "timestamp": "2026-11-20T22:37:38Z"
+      },
+      {
         "version": "0.3.0.0",
         "changelog": "Reuses each video's speech analysis (much faster later subtitles); optional per-library analysis of new videos",
         "targetAbi": "12.1.0.0",
