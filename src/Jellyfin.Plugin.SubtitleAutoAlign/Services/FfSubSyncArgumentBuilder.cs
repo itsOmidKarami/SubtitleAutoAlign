@@ -13,33 +13,38 @@ public static class FfSubSyncArgumentBuilder
     /// Builds the argument list for an ffsubsync invocation:
     /// <c>ffsubsync &lt;video&gt; -i &lt;subtitle&gt; -o &lt;output&gt; [extra args]</c>.
     /// </summary>
-    /// <param name="videoPath">Path to the reference video file.</param>
-    /// <param name="subtitlePath">Path to the subtitle to align.</param>
-    /// <param name="outputPath">Path to write the aligned subtitle to.</param>
+    /// <param name="videoPath">Reference: the video file, or a cached <c>.npz</c> speech analysis.</param>
+    /// <param name="subtitlePath">Path to the subtitle to align; null analyses the reference only.</param>
+    /// <param name="outputPath">Path to write the aligned subtitle to; required with a subtitle.</param>
     /// <param name="extraArguments">Optional extra CLI arguments, space-separated and
     /// possibly containing double-quoted segments (e.g. "--max-offset-seconds 60").</param>
     /// <param name="ffmpegDirectory">Directory containing ffmpeg and ffprobe, passed as
     /// <c>--ffmpeg-path</c>; null or empty lets ffsubsync search PATH.</param>
+    /// <param name="serializeSpeech">Adds <c>--serialize-speech</c>, which makes ffsubsync save
+    /// its analysis as <c>&lt;reference&gt;.npz</c>.</param>
     /// <returns>Ordered argument list, suitable for <c>ProcessStartInfo.ArgumentList</c>.</returns>
     public static IReadOnlyList<string> Build(
         string videoPath,
-        string subtitlePath,
-        string outputPath,
+        string? subtitlePath,
+        string? outputPath,
         string? extraArguments = null,
-        string? ffmpegDirectory = null)
+        string? ffmpegDirectory = null,
+        bool serializeSpeech = false)
     {
         ArgumentException.ThrowIfNullOrEmpty(videoPath);
-        ArgumentException.ThrowIfNullOrEmpty(subtitlePath);
-        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+        var arguments = new List<string> { videoPath };
 
-        var arguments = new List<string>
+        if (subtitlePath is not null)
         {
-            videoPath,
-            "-i",
-            subtitlePath,
-            "-o",
-            outputPath,
-        };
+            ArgumentException.ThrowIfNullOrEmpty(subtitlePath);
+            ArgumentException.ThrowIfNullOrEmpty(outputPath);
+            arguments.AddRange(["-i", subtitlePath, "-o", outputPath]);
+        }
+
+        if (serializeSpeech)
+        {
+            arguments.Add("--serialize-speech");
+        }
 
         if (!string.IsNullOrEmpty(ffmpegDirectory))
         {

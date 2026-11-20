@@ -45,5 +45,11 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// </summary>
 #pragma warning disable CA1819 // Jellyfin's XML config serializer needs a settable array.
     public string[] DisabledLibraryIds { get; set; } = System.Array.Empty<string>();
+
+    /// <summary>
+    /// Gets or sets the IDs of libraries whose newly added videos are analysed in
+    /// advance. Opt-in, so stored as inclusions; empty means off.
+    /// </summary>
+    public string[] PreAnalyseLibraryIds { get; set; } = System.Array.Empty<string>();
 #pragma warning restore CA1819
 }

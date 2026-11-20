@@ -27,12 +27,26 @@ public static class AutoAlignScope
     /// <returns>True if the item is in a watched library.</returns>
     public static bool IsInEnabledLibrary(IEnumerable<Guid> itemLibraryIds, IEnumerable<string>? disabledLibraryIds)
     {
-        var disabled = (disabledLibraryIds ?? [])
-            .Select(id => Guid.TryParse(id, out var guid) ? guid : Guid.Empty)
-            .Where(guid => guid != Guid.Empty)
-            .ToHashSet();
-
+        var disabled = ParseIds(disabledLibraryIds);
         var libraries = itemLibraryIds.ToList();
         return libraries.Count == 0 || libraries.Any(id => !disabled.Contains(id));
     }
+
+    /// <summary>
+    /// True only when one of the item's libraries is in <paramref name="selectedLibraryIds"/>
+    /// (opt-in lists, such as pre-analysis).
+    /// </summary>
+    /// <param name="itemLibraryIds">IDs of the libraries the item belongs to.</param>
+    /// <param name="selectedLibraryIds">Ticked library IDs, in any GUID format; null means none.</param>
+    /// <returns>True if the item is in a ticked library.</returns>
+    public static bool IsInSelectedLibrary(IEnumerable<Guid> itemLibraryIds, IEnumerable<string>? selectedLibraryIds)
+    {
+        var selected = ParseIds(selectedLibraryIds);
+        return itemLibraryIds.Any(selected.Contains);
+    }
+
+    private static HashSet<Guid> ParseIds(IEnumerable<string>? ids) => (ids ?? [])
+        .Select(id => Guid.TryParse(id, out var guid) ? guid : Guid.Empty)
+        .Where(guid => guid != Guid.Empty)
+        .ToHashSet();
 }

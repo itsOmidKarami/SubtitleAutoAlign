@@ -20,6 +20,11 @@ public sealed class FakeProcessRunner : IProcessRunner
 
     public int CallCount { get; private set; }
 
+    /// <summary>
+    /// Gets or sets a callback run with the arguments, e.g. to simulate files ffsubsync writes.
+    /// </summary>
+    public System.Action<IReadOnlyList<string>>? OnRun { get; set; }
+
     public Task<ProcessRunResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
@@ -29,6 +34,7 @@ public sealed class FakeProcessRunner : IProcessRunner
         CallCount++;
         LastFileName = fileName;
         LastArguments = arguments;
+        OnRun?.Invoke(arguments);
         return Task.FromResult(ResultToReturn);
     }
 }

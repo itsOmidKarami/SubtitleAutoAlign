@@ -81,6 +81,11 @@ are listed in the log.
   Renaming an unticked library gives it a new ID in Jellyfin, so it comes back
   ticked; untick it again after a rename. Doesn't affect the **Align all
   subtitles** task.
+- **Analyse new videos in advance** — one checkbox per library, all unticked by
+  default. New movies and episodes in ticked libraries get their speech
+  analysed as soon as Jellyfin adds them, so the first subtitle aligns in
+  seconds. Either way, every alignment after a video's first reuses its saved
+  analysis (stored in Jellyfin's data folder, never next to your media).
 - **ffsubsync path** — leave empty (the default) to auto-detect: prefers the
   bundled binary on Linux x64, otherwise falls back to `ffsubsync` on PATH.
   Set an explicit executable name or full path to override.

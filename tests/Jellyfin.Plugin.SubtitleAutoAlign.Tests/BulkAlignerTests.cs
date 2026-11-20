@@ -94,6 +94,7 @@ public class BulkAlignerTests
             OnCall?.Invoke();
             return Task.FromResult(_results.Dequeue());
         }
+        public Task<bool> PreAnalyseAsync(string videoPath, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 
     private sealed class RecordingProgress : IProgress<double>

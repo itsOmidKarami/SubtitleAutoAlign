@@ -21,6 +21,10 @@ public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
 
         serviceCollection.AddSingleton<IProcessRunner, ProcessRunner>();
         serviceCollection.AddSingleton<IFfSubSyncLocator, FfSubSyncLocator>();
+        // DataPath, not CachePath: Jellyfin's cache cleanup deletes files older than 30 days,
+        // which would throw away analyses before a late subtitle could use them.
+        serviceCollection.AddSingleton(provider => new SpeechCache(
+            Path.Combine(provider.GetRequiredService<IServerApplicationPaths>().DataPath, "subtitle-auto-align")));
         serviceCollection.AddSingleton<ISubtitleAlignmentService>(provider =>
             new SubtitleAlignmentService(
                 provider.GetRequiredService<IProcessRunner>(),
@@ -29,7 +33,8 @@ public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
                 // Jellyfin's ffmpeg (e.g. /usr/lib/jellyfin-ffmpeg) is usually not on PATH.
                 // Resolved per call: EncoderPath is only set once the server has started.
                 () => Path.GetDirectoryName(provider.GetRequiredService<IMediaEncoder>().EncoderPath),
-                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SubtitleAlignmentService>>()));
+                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SubtitleAlignmentService>>(),
+                provider.GetRequiredService<SpeechCache>()));
 
         serviceCollection.AddHostedService<SubtitleDownloadWatcher>();
     }

@@ -31,8 +31,10 @@ public sealed class SubtitleDownloadWatcher : IHostedService
     private readonly ISubtitleAlignmentService _alignmentService;
     private readonly ILogger<SubtitleDownloadWatcher> _logger;
     private readonly ConcurrentDictionary<Guid, HashSet<string>> _knownSubtitlePaths = new();
-    private readonly Channel<AlignmentRequest> _channel = Channel.CreateBounded<AlignmentRequest>(
-        new BoundedChannelOptions(100) { FullMode = BoundedChannelFullMode.Wait }); // Wait: TryWrite returns false when full, so drops get logged.
+    private readonly SpeechCache _speechCache;
+
+    // Alignments (someone is waiting) always run before background speech analysis.
+    private readonly PriorityWorkQueue<AlignmentRequest, PreAnalysisJob> _queue = new(job => job.VideoPath);
 
     private DateTime _startedUtc = DateTime.UtcNow;
     private CancellationTokenSource? _workerCts;
@@ -44,11 +46,14 @@ public sealed class SubtitleDownloadWatcher : IHostedService
     /// <param name="libraryManager">Library manager, used to observe item updates.</param>
     /// <param name="alignmentService">Service used to perform the actual alignment.</param>
     /// <param name="logger">Logger.</param>
+    /// <param name="speechCache">Saved speech analyses, cleaned up when videos are removed.</param>
     public SubtitleDownloadWatcher(
         ILibraryManager libraryManager,
         ISubtitleAlignmentService alignmentService,
-        ILogger<SubtitleDownloadWatcher> logger)
+        ILogger<SubtitleDownloadWatcher> logger,
+        SpeechCache speechCache)
     {
+        _speechCache = speechCache ?? throw new ArgumentNullException(nameof(speechCache));
         WriteDiagnosticMarker("SubtitleDownloadWatcher constructor called");
 
         _libraryManager = libraryManager ?? throw new ArgumentNullException(nameof(libraryManager));
@@ -62,7 +67,13 @@ public sealed class SubtitleDownloadWatcher : IHostedService
         WriteDiagnosticMarker("StartAsync called");
 
         _startedUtc = DateTime.UtcNow;
+
+        // Before the worker starts: nothing can be using a work folder yet.
+        _speechCache.DeleteStaleWorkFolders();
+
         _libraryManager.ItemUpdated += OnItemUpdated;
+        _libraryManager.ItemAdded += OnItemAdded;
+        _libraryManager.ItemRemoved += OnItemRemoved;
 
         _workerCts = new CancellationTokenSource();
         _workerTask = Task.Run(() => ProcessQueueAsync(_workerCts.Token), CancellationToken.None);
@@ -94,8 +105,10 @@ public sealed class SubtitleDownloadWatcher : IHostedService
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _libraryManager.ItemUpdated -= OnItemUpdated;
+        _libraryManager.ItemAdded -= OnItemAdded;
+        _libraryManager.ItemRemoved -= OnItemRemoved;
 
-        _channel.Writer.TryComplete();
+        _queue.Complete();
         _workerCts?.Cancel();
 
         if (_workerTask is not null)
@@ -170,22 +183,24 @@ public sealed class SubtitleDownloadWatcher : IHostedService
             return;
         }
 
+        // Our own .autoaligned outputs also appear as new files; skip them quietly.
+        var candidates = newPaths.Where(SubtitleChangeDetector.IsCandidateSubtitle).ToList();
+        if (candidates.Count == 0)
+        {
+            _logger.LogDebug("No new candidate subtitles for {ItemName}", video.Name);
+            return;
+        }
+
         _logger.LogInformation(
             "Found {NewCount} newly-appeared subtitle file(s) for {ItemName}: {NewPaths}",
-            newPaths.Count,
+            candidates.Count,
             video.Name,
-            string.Join(", ", newPaths));
+            string.Join(", ", candidates));
 
-        foreach (var subtitlePath in newPaths)
+        foreach (var subtitlePath in candidates)
         {
-            if (!SubtitleChangeDetector.IsCandidateSubtitle(subtitlePath))
-            {
-                _logger.LogDebug("Skipping non-candidate subtitle {SubtitlePath}", subtitlePath);
-                continue;
-            }
-
             var request = new AlignmentRequest(video.Id, videoPath, subtitlePath);
-            if (_channel.Writer.TryWrite(request))
+            if (_queue.TryEnqueueHigh(request))
             {
                 _logger.LogInformation("Enqueued {SubtitlePath} for auto-alignment", subtitlePath);
             }
@@ -196,18 +211,95 @@ public sealed class SubtitleDownloadWatcher : IHostedService
         }
     }
 
+    private void OnItemAdded(object? sender, ItemChangeEventArgs e)
+    {
+        if (e.Item is not { } video || !AutoAlignScope.IsWatchedType(video) || string.IsNullOrEmpty(video.Path))
+        {
+            return;
+        }
+
+        var selected = Plugin.Instance?.Configuration.PreAnalyseLibraryIds;
+        if (selected is not { Length: > 0 })
+        {
+            return;
+        }
+
+        var libraryIds = _libraryManager.GetCollectionFolders(video).Select(folder => folder.Id).ToArray();
+        if (!AutoAlignScope.IsInSelectedLibrary(libraryIds, selected))
+        {
+            return;
+        }
+
+        if (_queue.TryEnqueueLow(new PreAnalysisJob(video.Path, libraryIds)))
+        {
+            _logger.LogInformation(
+                "Queued {ItemName} for speech analysis in advance ({Waiting} waiting)",
+                video.Name,
+                _queue.LowCount);
+        }
+    }
+
+    private void OnItemRemoved(object? sender, ItemChangeEventArgs e)
+    {
+        if (e.Item is not { } video || !AutoAlignScope.IsWatchedType(video) || string.IsNullOrEmpty(video.Path))
+        {
+            return;
+        }
+
+        try
+        {
+            _speechCache.Remove(video.Path);
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not delete the saved speech analysis for {ItemName}", video.Name);
+        }
+    }
+
     private async Task ProcessQueueAsync(CancellationToken cancellationToken)
     {
-        await foreach (var request in _channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        while (true)
         {
+            (AlignmentRequest? High, PreAnalysisJob? Low) work;
             try
             {
-                await _alignmentService.AlignAsync(request, cancellationToken).ConfigureAwait(false);
+                work = await _queue.DequeueAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ChannelClosedException)
+            {
+                return;
+            }
+
+            try
+            {
+                if (work.High is { } request)
+                {
+                    await _alignmentService.AlignAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                else if (work.Low is { } job)
+                {
+                    // Re-checked here so unticking a library stops its queued backlog.
+                    if (AutoAlignScope.IsInSelectedLibrary(job.LibraryIds, Plugin.Instance?.Configuration.PreAnalyseLibraryIds))
+                    {
+                        await _alignmentService.PreAnalyseAsync(job.VideoPath, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Skipping speech analysis for {VideoPath}: its library is no longer ticked", job.VideoPath);
+                    }
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Unexpected error aligning subtitle {SubtitlePath}", request.SubtitlePath);
+                _logger.LogError(ex, "Unexpected error processing {Work}", work.High?.SubtitlePath ?? work.Low?.VideoPath);
             }
         }
     }
 }
+
+/// <summary>
+/// A queued speech analysis for a newly added video, with the libraries it belongs to.
+/// </summary>
+/// <param name="VideoPath">The video file.</param>
+/// <param name="LibraryIds">IDs of the video's libraries when it was queued.</param>
+internal sealed record PreAnalysisJob(string VideoPath, Guid[] LibraryIds);

@@ -27,6 +27,12 @@
                         <div class="fieldDescription">New subtitles in unticked libraries are not aligned automatically. Libraries you add later are watched.</div>
                     </div>
 
+                    <div class="verticalSection" style="margin-bottom: 2em;">
+                        <h3>Analyse new videos in advance</h3>
+                        <div id="PreAnalyseLibraryList"></div>
+                        <div class="fieldDescription">New movies and episodes in ticked libraries are analysed as soon as Jellyfin adds them, so their first subtitle aligns in seconds. This uses CPU for every new video, including ones you never add subtitles to. Later subtitles for a video are always fast, ticked or not.</div>
+                    </div>
+
                     <div class="inputContainer">
                         <input id="FfSubSyncPath" name="FfSubSyncPath" type="text" is="emby-input" label="ffsubsync path (optional)" />
                         <div class="fieldDescription">Leave empty to auto-detect: uses the ffsubsync binary bundled with this plugin (Linux x64), or falls back to "ffsubsync" on PATH. Set an explicit path to override.</div>
@@ -100,7 +106,10 @@
                 Dashboard.showLoadingMsg();
                 Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getVirtualFolders()]).then(function (results) {
                     const config = results[0];
-                    renderLibraries(view, results[1], config.DisabledLibraryIds || []);
+                    const disabled = (config.DisabledLibraryIds || []).map(normalizeId);
+                    const preAnalysed = (config.PreAnalyseLibraryIds || []).map(normalizeId);
+                    renderLibraries(view, results[1], '#LibraryList', 'chkLibrary', function (id) { return disabled.indexOf(id) === -1; });
+                    renderLibraries(view, results[1], '#PreAnalyseLibraryList', 'chkPreAnalyse', function (id) { return preAnalysed.indexOf(id) !== -1; });
                     view.querySelector('#EnableAutoAlign').checked = config.EnableAutoAlign;
                     view.querySelector('#FfSubSyncPath').value = config.FfSubSyncPath;
                     view.querySelector('#ExtraArguments').value = config.ExtraArguments;
@@ -115,9 +124,8 @@
                 return String(id).replace(/-/g, '').toLowerCase();
             }
 
-            function renderLibraries(view, folders, disabledIds) {
-                const disabled = disabledIds.map(normalizeId);
-                const list = view.querySelector('#LibraryList');
+            function renderLibraries(view, folders, listSelector, boxClass, isTicked) {
+                const list = view.querySelector(listSelector);
                 list.innerHTML = '';
                 folders.filter(function (folder) {
                     // A library without an ID can't be stored, so it isn't offered.
@@ -131,9 +139,9 @@
                     const input = document.createElement('input');
                     input.type = 'checkbox';
                     input.setAttribute('is', 'emby-checkbox');
-                    input.className = 'chkLibrary';
+                    input.className = boxClass;
                     input.setAttribute('data-library-id', folder.ItemId);
-                    input.checked = disabled.indexOf(normalizeId(folder.ItemId)) === -1;
+                    input.checked = isTicked(normalizeId(folder.ItemId));
                     const span = document.createElement('span');
                     span.textContent = folder.Name;
                     label.appendChild(input);
@@ -167,6 +175,9 @@
                     config.OverwriteExistingAlignedSubtitle = view.querySelector('#OverwriteExistingAlignedSubtitle').checked;
                     config.DisabledLibraryIds = Array.prototype.filter
                         .call(view.querySelectorAll('.chkLibrary'), function (box) { return !box.checked; })
+                        .map(function (box) { return box.getAttribute('data-library-id'); });
+                    config.PreAnalyseLibraryIds = Array.prototype.filter
+                        .call(view.querySelectorAll('.chkPreAnalyse'), function (box) { return box.checked; })
                         .map(function (box) { return box.getAttribute('data-library-id'); });
 
                     view.querySelector('#TimeoutSeconds').value = config.TimeoutSeconds;
