@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/itsOmidKarami/SubtitleAutoAlign/main/icon.png",
     "versions": [
       {
+        "version": "0.2.0.0",
+        "changelog": "TV episodes and per-library auto-align; settings page fixed on Jellyfin 12",
+        "targetAbi": "12.1.0.0",
+        "sourceUrl": "https://github.com/itsOmidKarami/SubtitleAutoAlign/releases/download/v0.2.0.0/subtitle-auto-align-0.2.0.0.zip",
+        "checksum": "63f8be4610251b2f7167c6f904083c2c",
+        "timestamp": "2026-11-20T21:17:57Z"
+      },
+      {
         "version": "0.1.5.0",
         "changelog": "searching for subs recursively",
         "targetAbi": "12.1.0.0",
