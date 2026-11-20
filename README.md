@@ -86,6 +86,9 @@ are listed in the log.
   analysed as soon as Jellyfin adds them, so the first subtitle aligns in
   seconds. Either way, every alignment after a video's first reuses its saved
   analysis (stored in Jellyfin's data folder, never next to your media).
+  Renaming a ticked library gives it a new ID, so it comes back unticked;
+  tick it again after a rename. `.strm` files and DVD/Blu-ray folders are not
+  analysed in advance.
 - **ffsubsync path** — leave empty (the default) to auto-detect: prefers the
   bundled binary on Linux x64, otherwise falls back to `ffsubsync` on PATH.
   Set an explicit executable name or full path to override.

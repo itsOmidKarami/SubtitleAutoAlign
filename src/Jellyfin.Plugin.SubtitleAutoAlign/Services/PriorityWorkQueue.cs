@@ -99,9 +99,13 @@ public sealed class PriorityWorkQueue<THigh, TLow>
                 return (null, low);
             }
 
-            var highReady = _high.Reader.WaitToReadAsync(cancellationToken).AsTask();
-            var lowReady = _low.Reader.WaitToReadAsync(cancellationToken).AsTask();
+            // Each wait gets its own token, cancelled once either channel wakes us, so the
+            // other channel's unused waiter is released instead of piling up.
+            using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var highReady = _high.Reader.WaitToReadAsync(waitCts.Token).AsTask();
+            var lowReady = _low.Reader.WaitToReadAsync(waitCts.Token).AsTask();
             await Task.WhenAny(highReady, lowReady).ConfigureAwait(false);
+            await waitCts.CancelAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (highReady.IsCompletedSuccessfully && !highReady.Result

@@ -45,6 +45,17 @@ public static class AutoAlignScope
         return itemLibraryIds.Any(selected.Contains);
     }
 
+    /// <summary>
+    /// True when ffsubsync can analyse the path: an existing file that isn't a <c>.strm</c>
+    /// pointer. DVD/Blu-ray movies (a folder) and missing files are skipped.
+    /// </summary>
+    /// <param name="videoPath">The item's path.</param>
+    /// <returns>True if the path is an analysable video file.</returns>
+    public static bool IsAnalysableFile(string? videoPath) =>
+        !string.IsNullOrEmpty(videoPath)
+        && System.IO.File.Exists(videoPath)
+        && !string.Equals(System.IO.Path.GetExtension(videoPath), ".strm", StringComparison.OrdinalIgnoreCase);
+
     private static HashSet<Guid> ParseIds(IEnumerable<string>? ids) => (ids ?? [])
         .Select(id => Guid.TryParse(id, out var guid) ? guid : Guid.Empty)
         .Where(guid => guid != Guid.Empty)

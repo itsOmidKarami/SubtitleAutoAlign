@@ -213,7 +213,7 @@ public sealed class SubtitleDownloadWatcher : IHostedService
 
     private void OnItemAdded(object? sender, ItemChangeEventArgs e)
     {
-        if (e.Item is not { } video || !AutoAlignScope.IsWatchedType(video) || string.IsNullOrEmpty(video.Path))
+        if (e.Item is not { } video || !AutoAlignScope.IsWatchedType(video) || !AutoAlignScope.IsAnalysableFile(video.Path))
         {
             return;
         }

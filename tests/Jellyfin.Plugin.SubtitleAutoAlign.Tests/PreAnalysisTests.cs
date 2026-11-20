@@ -52,6 +52,32 @@ public class PreAnalysisTests
     }
 
     [Fact]
+    public async Task Queue_CompletedWhileWaiting_DequeueEnds()
+    {
+        var queue = new PriorityWorkQueue<string, string>();
+        var pending = queue.DequeueAsync(CancellationToken.None).AsTask();
+        await Task.Delay(50);
+
+        queue.Complete();
+
+        await Assert.ThrowsAsync<System.Threading.Channels.ChannelClosedException>(() => pending.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task Queue_ManyLowItemsThenHigh_AllServedInOrder()
+    {
+        var queue = new PriorityWorkQueue<string, string>();
+        for (var i = 0; i < 50; i++)
+        {
+            queue.TryEnqueueLow("low" + i);
+            Assert.Equal("low" + i, (await queue.DequeueAsync(CancellationToken.None)).Low);
+        }
+
+        queue.TryEnqueueHigh("align");
+        Assert.Equal("align", (await queue.DequeueAsync(CancellationToken.None)).High);
+    }
+
+    [Fact]
     public async Task Queue_DuplicateLowItem_RejectedUntilTaken()
     {
         var queue = new PriorityWorkQueue<string, string>(low => low);
@@ -61,6 +87,45 @@ public class PreAnalysisTests
         await queue.DequeueAsync(CancellationToken.None);
 
         Assert.True(queue.TryEnqueueLow("/m/a.mkv"));
+    }
+
+    [Fact]
+    public void IsAnalysableFile_RegularVideo_True()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".mkv");
+        File.WriteAllText(path, "video");
+        try
+        {
+            Assert.True(AutoAlignScope.IsAnalysableFile(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void IsAnalysableFile_StrmFile_False()
+    {
+        // A .strm is a text file pointing at a stream; ffsubsync can't analyse it.
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".strm");
+        File.WriteAllText(path, "http://example.invalid/stream");
+        try
+        {
+            Assert.False(AutoAlignScope.IsAnalysableFile(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void IsAnalysableFile_DiscFolderOrMissing_False()
+    {
+        // DVD/Blu-ray movies have a folder as their path.
+        Assert.False(AutoAlignScope.IsAnalysableFile(Path.GetTempPath()));
+        Assert.False(AutoAlignScope.IsAnalysableFile(Path.Combine(Path.GetTempPath(), "missing.mkv")));
     }
 
     [Fact]
