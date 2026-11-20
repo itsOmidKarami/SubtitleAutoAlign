@@ -38,4 +38,12 @@ public sealed class PluginConfiguration : BasePluginConfiguration
     /// should be overwritten if alignment runs again for the same input.
     /// </summary>
     public bool OverwriteExistingAlignedSubtitle { get; set; }
+
+    /// <summary>
+    /// Gets or sets the IDs of libraries the automatic watcher skips. Stored as
+    /// exclusions so libraries added later are watched by default.
+    /// </summary>
+#pragma warning disable CA1819 // Jellyfin's XML config serializer needs a settable array.
+    public string[] DisabledLibraryIds { get; set; } = System.Array.Empty<string>();
+#pragma warning restore CA1819
 }

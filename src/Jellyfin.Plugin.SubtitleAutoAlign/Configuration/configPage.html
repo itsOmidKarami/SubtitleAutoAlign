@@ -10,7 +10,7 @@
                 <form id="SubtitleAutoAlignConfigForm">
                     <div class="verticalSection">
                         <h2>Subtitle Auto Align</h2>
-                        <p>Automatically runs ffsubsync on newly downloaded subtitles for movies, writing an aligned copy alongside the original.</p>
+                        <p>Automatically runs ffsubsync on newly downloaded subtitles for movies and TV episodes, writing an aligned copy alongside the original.</p>
                     </div>
 
                     <div class="checkboxContainer checkboxContainer-withDescription">
@@ -19,6 +19,12 @@
                             <span>Enable automatic alignment</span>
                         </label>
                         <div class="fieldDescription checkboxFieldDescription">Align new subtitles as they appear. Does not affect "Align all subtitles" below.</div>
+                    </div>
+
+                    <div class="verticalSection" style="margin-bottom: 2em;">
+                        <h3>Watch these libraries</h3>
+                        <div id="LibraryList"></div>
+                        <div class="fieldDescription">New subtitles in unticked libraries are not aligned automatically. Libraries you add later are watched.</div>
                     </div>
 
                     <div class="inputContainer">
@@ -58,8 +64,8 @@
                 </div>
             </div>
         </div>
-    </div>
-    <script type="text/javascript">
+        <!-- Must stay inside the data-role="page" element: the web client drops anything outside it. -->
+        <script type="text/javascript">
         (function () {
             const pluginId = "8f5c9d3a-6b1e-4a2f-9c7d-2e1b4f6a8c3d";
             const alignAllTaskKey = "SubtitleAutoAlignAll";
@@ -84,14 +90,50 @@
 
             function loadConfig(view) {
                 Dashboard.showLoadingMsg();
-                ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                Promise.all([ApiClient.getPluginConfiguration(pluginId), ApiClient.getVirtualFolders()]).then(function (results) {
+                    const config = results[0];
+                    renderLibraries(view, results[1], config.DisabledLibraryIds || []);
                     view.querySelector('#EnableAutoAlign').checked = config.EnableAutoAlign;
                     view.querySelector('#FfSubSyncPath').value = config.FfSubSyncPath;
                     view.querySelector('#ExtraArguments').value = config.ExtraArguments;
                     view.querySelector('#TimeoutSeconds').value = config.TimeoutSeconds;
                     view.querySelector('#OverwriteExistingAlignedSubtitle').checked = config.OverwriteExistingAlignedSubtitle;
                     Dashboard.hideLoadingMsg();
+                }).catch(showError('Could not load the settings.'));
+            }
+
+            function normalizeId(id) {
+                return String(id).replace(/-/g, '').toLowerCase();
+            }
+
+            function renderLibraries(view, folders, disabledIds) {
+                const disabled = disabledIds.map(normalizeId);
+                const list = view.querySelector('#LibraryList');
+                list.innerHTML = '';
+                folders.forEach(function (folder) {
+                    const container = document.createElement('div');
+                    container.className = 'checkboxContainer';
+                    const label = document.createElement('label');
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.setAttribute('is', 'emby-checkbox');
+                    input.className = 'chkLibrary';
+                    input.setAttribute('data-library-id', folder.ItemId);
+                    input.checked = disabled.indexOf(normalizeId(folder.ItemId)) === -1;
+                    const span = document.createElement('span');
+                    span.textContent = folder.Name;
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    container.appendChild(label);
+                    list.appendChild(container);
                 });
+            }
+
+            function showError(fallback) {
+                return function (error) {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert((error && error.message) || fallback);
+                };
             }
 
             function saveConfig(view) {
@@ -100,13 +142,19 @@
                     config.EnableAutoAlign = view.querySelector('#EnableAutoAlign').checked;
                     config.FfSubSyncPath = view.querySelector('#FfSubSyncPath').value;
                     config.ExtraArguments = view.querySelector('#ExtraArguments').value;
-                    config.TimeoutSeconds = parseInt(view.querySelector('#TimeoutSeconds').value, 10);
+                    const timeout = parseInt(view.querySelector('#TimeoutSeconds').value, 10);
+                    // An empty field would send null, which the server rejects with HTTP 500.
+                    config.TimeoutSeconds = timeout > 0 ? timeout : 300;
                     config.OverwriteExistingAlignedSubtitle = view.querySelector('#OverwriteExistingAlignedSubtitle').checked;
+                    config.DisabledLibraryIds = Array.prototype.filter
+                        .call(view.querySelectorAll('.chkLibrary'), function (box) { return !box.checked; })
+                        .map(function (box) { return box.getAttribute('data-library-id'); });
 
-                    ApiClient.updatePluginConfiguration(pluginId, config).then(function (result) {
-                        Dashboard.processPluginConfigurationUpdateResult(result);
-                    });
-                });
+                    view.querySelector('#TimeoutSeconds').value = config.TimeoutSeconds;
+                    return ApiClient.updatePluginConfiguration(pluginId, config);
+                }).then(function (result) {
+                    Dashboard.processPluginConfigurationUpdateResult(result);
+                }).catch(showError('Could not save the settings.'));
             }
 
             document.querySelector('#SubtitleAutoAlignConfigPage')
@@ -124,6 +172,7 @@
             document.querySelector('#AlignAllSubtitlesButton')
                 .addEventListener('click', startAlignAll);
         })();
-    </script>
+        </script>
+    </div>
 </body>
 </html>

@@ -4,9 +4,9 @@
     "name": "Subtitle Auto Align",
     "description": "Automatically aligns newly downloaded subtitles to the video using ffsubsync.",
     "overview": "Runs ffsubsync against newly downloaded subtitles and adds an aligned copy alongside the original.",
-    "owner": "Mathis-Z",
+    "owner": "itsOmidKarami",
     "category": "Subtitles",
-    "imageUrl": "https://raw.githubusercontent.com/Mathis-Z/subtitle-auto-align/main/icon.png",
+    "imageUrl": "https://raw.githubusercontent.com/itsOmidKarami/SubtitleAutoAlign/main/icon.png",
     "versions": [
       {
         "version": "0.1.5.0",

@@ -6,11 +6,16 @@ the result alongside the original with an `.autoaligned` suffix (e.g.
 `Movie.en.srt` -> `Movie.en.autoaligned.srt`).
 Note: This plugin is completely AI-written so use this at your own risk.
 
+This is a fork of [Mathis-Z/SubtitleAutoAlign](https://github.com/Mathis-Z/SubtitleAutoAlign)
+that adds automatic alignment for TV episodes, a per-library choice of what
+is watched, and a fix for the settings page not loading or saving on
+Jellyfin 12.x.
+
 ## Installation
 
 1. In Jellyfin, go to **Dashboard -> Plugins -> Repositories**.
 2. Add a repository pointing at the raw manifest URL:
-   `https://raw.githubusercontent.com/Mathis-Z/subtitle-auto-align/main/manifest.json`
+   `https://raw.githubusercontent.com/itsOmidKarami/SubtitleAutoAlign/main/manifest.json`
 3. Install **Subtitle Auto Align** from **Dashboard -> Plugins -> Catalog**.
 
 On **Linux x64**, no further setup is needed: the plugin ships with a bundled,
@@ -29,7 +34,7 @@ configuration field — an explicit path always overrides the bundled binary.
 
 The plugin does **not** rely on a specific "subtitle downloaded" event from
 Jellyfin's OpenSubtitles provider, because the current plugin ABI does not
-expose one reliably. Instead, it watches library update events for movies and
+expose one reliably. Instead, it watches library update events for movies and TV episodes and
 diffs their external subtitle files against a previously observed snapshot.
 Any newly-appeared, non-aligned external subtitle file is treated as eligible
 for alignment — this includes subtitles from OpenSubtitles as well as other
@@ -66,6 +71,9 @@ are listed in the log.
 
 - **Enable automatic alignment** — align new subtitles as they appear. Doesn't
   affect the **Align all subtitles** task.
+- **Watch these libraries** — one checkbox per library. Automatic alignment
+  covers movies and TV episodes in ticked libraries; libraries added later are
+  ticked by default. Doesn't affect the **Align all subtitles** task.
 - **ffsubsync path** — leave empty (the default) to auto-detect: prefers the
   bundled binary on Linux x64, otherwise falls back to `ffsubsync` on PATH.
   Set an explicit executable name or full path to override.

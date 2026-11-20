@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.SubtitleAutoAlign.Models;
 using Jellyfin.Plugin.SubtitleAutoAlign.Services;
 using MediaBrowser.Controller.Entities;
-using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -17,14 +16,14 @@ namespace Jellyfin.Plugin.SubtitleAutoAlign.EventSubscribers;
 
 /// <summary>
 /// Watches the Jellyfin library for newly-appeared external subtitle files on
-/// movies and enqueues them for auto-alignment.
+/// movies and TV episodes and enqueues them for auto-alignment.
 ///
 /// Jellyfin does not expose a confirmed, ABI-stable "subtitle downloaded"
 /// event, so this watches <see cref="ILibraryManager.ItemUpdated"/> and diffs
-/// each movie's external subtitle files against a previously observed
+/// each item's external subtitle files against a previously observed
 /// snapshot. It does not attempt to prove a subtitle came specifically from
 /// the OpenSubtitles provider; any newly-appeared, non-aligned external
-/// subtitle on a movie is treated as eligible.
+/// subtitle on a movie or episode is treated as eligible.
 /// </summary>
 public sealed class SubtitleDownloadWatcher : IHostedService
 {
@@ -33,8 +32,9 @@ public sealed class SubtitleDownloadWatcher : IHostedService
     private readonly ILogger<SubtitleDownloadWatcher> _logger;
     private readonly ConcurrentDictionary<Guid, HashSet<string>> _knownSubtitlePaths = new();
     private readonly Channel<AlignmentRequest> _channel = Channel.CreateBounded<AlignmentRequest>(
-        new BoundedChannelOptions(100) { FullMode = BoundedChannelFullMode.DropOldest });
+        new BoundedChannelOptions(100) { FullMode = BoundedChannelFullMode.Wait }); // Wait: TryWrite returns false when full, so drops get logged.
 
+    private DateTime _startedUtc = DateTime.UtcNow;
     private CancellationTokenSource? _workerCts;
     private Task? _workerTask;
 
@@ -61,6 +61,7 @@ public sealed class SubtitleDownloadWatcher : IHostedService
     {
         WriteDiagnosticMarker("StartAsync called");
 
+        _startedUtc = DateTime.UtcNow;
         _libraryManager.ItemUpdated += OnItemUpdated;
 
         _workerCts = new CancellationTokenSource();
@@ -112,35 +113,41 @@ public sealed class SubtitleDownloadWatcher : IHostedService
 
     private void OnItemUpdated(object? sender, ItemChangeEventArgs e)
     {
-        if (e.Item is not Movie movie)
+        if (e.Item is not { } video || !AutoAlignScope.IsWatchedType(video))
         {
             _logger.LogDebug(
-                "Ignoring ItemUpdated for non-movie item {ItemName} ({ItemType})",
+                "Ignoring ItemUpdated for item {ItemName} ({ItemType}): not a movie or episode",
                 e.Item?.Name,
                 e.Item?.GetType().Name);
             return;
         }
 
-        var videoPath = movie.Path;
+        var videoPath = video.Path;
         if (string.IsNullOrEmpty(videoPath))
         {
-            _logger.LogDebug("Movie {MovieName} has no video path; skipping", movie.Name);
+            _logger.LogDebug("Movie {MovieName} has no video path; skipping", video.Name);
             return;
         }
 
-        var currentSubtitlePaths = SubtitleDiscovery.GetExternalSubtitlePaths(movie);
+        var currentSubtitlePaths = SubtitleDiscovery.GetExternalSubtitlePaths(video);
 
-        var previousSubtitlePaths = _knownSubtitlePaths.GetOrAdd(movie.Id, _ => new HashSet<string>());
+        var firstSight = !_knownSubtitlePaths.ContainsKey(video.Id);
+        var previousSubtitlePaths = _knownSubtitlePaths.GetOrAdd(video.Id, _ => new HashSet<string>());
 
         _logger.LogInformation(
-            "Checked movie {MovieName} for new subtitles: {CurrentCount} external subtitle(s) currently present, {PreviousCount} previously known",
-            movie.Name,
+            "Checked {MovieName} for new subtitles: {CurrentCount} external subtitle(s) currently present, {PreviousCount} previously known",
+            video.Name,
             currentSubtitlePaths.Count,
             previousSubtitlePaths.Count);
 
         var newPaths = SubtitleChangeDetector.DiffNewSubtitlePaths(previousSubtitlePaths, currentSubtitlePaths);
+        if (firstSight)
+        {
+            // No snapshot yet (e.g. after a restart): only files written since startup are new downloads.
+            newPaths = SubtitleChangeDetector.WrittenSince(newPaths, _startedUtc, System.IO.File.GetLastWriteTimeUtc);
+        }
 
-        _knownSubtitlePaths[movie.Id] = new HashSet<string>(currentSubtitlePaths, StringComparer.OrdinalIgnoreCase);
+        _knownSubtitlePaths[video.Id] = new HashSet<string>(currentSubtitlePaths, StringComparer.OrdinalIgnoreCase);
 
         if (newPaths.Count == 0)
         {
@@ -149,16 +156,24 @@ public sealed class SubtitleDownloadWatcher : IHostedService
 
         // Checked after the snapshot update, so subtitles that appear while this is
         // off are not aligned later; the "Align all subtitles" task covers those.
-        if (Plugin.Instance?.Configuration.EnableAutoAlign == false)
+        var configuration = Plugin.Instance?.Configuration;
+        if (configuration?.EnableAutoAlign == false)
         {
-            _logger.LogInformation("Automatic alignment is disabled; not aligning new subtitles for {MovieName}", movie.Name);
+            _logger.LogInformation("Automatic alignment is disabled; not aligning new subtitles for {MovieName}", video.Name);
+            return;
+        }
+
+        var libraryIds = _libraryManager.GetCollectionFolders(video).Select(folder => folder.Id);
+        if (configuration is not null && !AutoAlignScope.IsInEnabledLibrary(libraryIds, configuration.DisabledLibraryIds))
+        {
+            _logger.LogInformation("{MovieName} is not in a watched library; not aligning its new subtitles", video.Name);
             return;
         }
 
         _logger.LogInformation(
             "Found {NewCount} newly-appeared subtitle file(s) for {MovieName}: {NewPaths}",
             newPaths.Count,
-            movie.Name,
+            video.Name,
             string.Join(", ", newPaths));
 
         foreach (var subtitlePath in newPaths)
@@ -169,7 +184,7 @@ public sealed class SubtitleDownloadWatcher : IHostedService
                 continue;
             }
 
-            var request = new AlignmentRequest(movie.Id, videoPath, subtitlePath);
+            var request = new AlignmentRequest(video.Id, videoPath, subtitlePath);
             if (_channel.Writer.TryWrite(request))
             {
                 _logger.LogInformation("Enqueued {SubtitlePath} for auto-alignment", subtitlePath);

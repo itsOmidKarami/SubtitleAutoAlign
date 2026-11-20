@@ -39,6 +39,33 @@ public static class SubtitleChangeDetector
     }
 
     /// <summary>
+    /// Keeps the subtitles last written at or after <paramref name="sinceUtc"/>. Used the
+    /// first time an item is seen after startup, so subtitles that existed before the
+    /// restart are not treated as new downloads. Files that can't be read are skipped.
+    /// </summary>
+    /// <param name="paths">Candidate subtitle paths.</param>
+    /// <param name="sinceUtc">Watcher start time.</param>
+    /// <param name="lastWriteUtc">Returns a file's last-write time in UTC.</param>
+    /// <returns>The paths written since <paramref name="sinceUtc"/>.</returns>
+    public static IReadOnlyList<string> WrittenSince(
+        IEnumerable<string> paths,
+        DateTime sinceUtc,
+        Func<string, DateTime> lastWriteUtc)
+    {
+        return paths.Where(path =>
+        {
+            try
+            {
+                return lastWriteUtc(path) >= sinceUtc;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }).ToList();
+    }
+
+    /// <summary>
     /// Determines whether a subtitle path is eligible for auto-alignment:
     /// a recognized subtitle extension, and not already an aligned output.
     /// </summary>
