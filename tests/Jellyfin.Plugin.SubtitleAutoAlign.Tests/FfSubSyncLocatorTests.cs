@@ -46,7 +46,8 @@ public class FfSubSyncLocatorTests : IDisposable
     [Fact]
     public void Resolve_BundledBinaryPresent_ReturnsBundledPath()
     {
-        if (!IsSupportedPlatform)
+        // OperatingSystem.IsLinux() spelled out so the platform analyzer (CA1416) sees the guard.
+        if (!OperatingSystem.IsLinux() || !IsSupportedPlatform)
         {
             // Bundled binaries are only shipped for linux-x64; on other
             // platforms auto-detect always falls back to PATH, which is

@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build standalone binary
         # Same recipe the Jellyfin container tests use; built on Debian 12 so
@@ -62,7 +62,7 @@ jobs:
             --ffmpeg-path /usr/lib/jellyfin-ffmpeg
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ffsubsync-linux-x64
           path: dist/ffsubsync
@@ -74,12 +74,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
@@ -91,13 +91,19 @@ jobs:
             -o out
 
       - name: Download bundled ffsubsync binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ffsubsync-linux-x64
           path: out/bundled/linux-x64
 
       - name: Mark bundled binary executable
         run: chmod +x out/bundled/linux-x64/ffsubsync
+
+      - name: Add licence files
+        # MIT requires shipping ffsubsync's notice with its binary.
+        run: |
+          cp LICENSE out/LICENSE
+          cp licenses/ffsubsync-LICENSE.txt out/bundled/linux-x64/LICENSE
 
       - name: Package zip
         run: |
@@ -146,14 +152,6 @@ jobs:
               f.write("\n")
           PYEOF
 
-      - name: Commit manifest.json
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add manifest.json
-          git diff --staged --quiet && echo "No manifest.json changes to commit" || git commit -m "Release v${{ github.event.inputs.version }}"
-          git push
-
       - name: Delete existing release and tag, if any
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -165,8 +163,20 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Passed through the environment so quotes or backticks in the text can't break the shell.
+          CHANGELOG: ${{ github.event.inputs.changelog }}
         run: |
           gh release create "v${{ github.event.inputs.version }}" \
             "${{ env.ARTIFACT_NAME }}.zip" \
+            --target "$GITHUB_SHA" \
             --title "v${{ github.event.inputs.version }}" \
-            --notes "${{ github.event.inputs.changelog }}"
+            --notes "$CHANGELOG"
+
+      - name: Commit manifest.json
+        # Only after the release exists, so Jellyfin never sees a version whose zip isn't downloadable yet.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifest.json
+          git diff --staged --quiet && echo "No manifest.json changes to commit" || git commit -m "Release v${{ github.event.inputs.version }}"
+          git push

@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: monthly
+    ignore:
+      # Pinned to the Jellyfin ABI in manifest.json (targetAbi); bump them together by hand.
+      - dependency-name: "Jellyfin.*"
